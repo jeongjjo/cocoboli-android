@@ -2,6 +2,7 @@ package com.punkytails.cocoboli
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActionBar
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -14,10 +15,13 @@ import android.net.Uri
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Message
 import android.os.Parcelable
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
 import androidx.annotation.RequiresApi
@@ -34,6 +38,7 @@ class MainActivity : AppCompatActivity() {
         const val ACTION_BRIDGE_EVENT = "action_bridge_event"
         const val EXTRA_BRIDGE_EVENT = "extra_bridge_event"
         const val EXTRA_FINISH_APP = "finish_app"
+        const val EXTRA_FINISH_SPLASH = "finish_splash"
         private const val REQUEST_PERMISSIONS = 1000
     }
     // camera permission
@@ -59,6 +64,7 @@ class MainActivity : AppCompatActivity() {
 
     lateinit var gpsTracker: GpsTracker
 
+    lateinit var parentLayout: ViewGroup
     lateinit var webView: WebView
 
     private var startTime: Long = 0
@@ -67,6 +73,9 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if(intent?.action == ACTION_BRIDGE_EVENT) {
                 when(intent.getStringExtra(EXTRA_BRIDGE_EVENT)) {
+                    EXTRA_FINISH_SPLASH -> {
+
+                    }
                     EXTRA_FINISH_APP -> {
                         finish()
                     }
@@ -87,13 +96,17 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
-        window.statusBarColor = Color.parseColor("#547FD8")
+        window.statusBarColor = Color.parseColor("#ffffff")
+        if(Build.VERSION.SDK_INT >= 23){
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        }
         //startActivity(Intent(this, MainActivity::class.java))
+        startActivity(Intent(this, SplashActivity::class.java))
         LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, IntentFilter(ACTION_BRIDGE_EVENT))
-
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
         checkPermissions()
+        setContentView(R.layout.activity_main)
+        parentLayout = findViewById(R.id.parent_layout)
         webView = findViewById(R.id.webView)
 
         //timer
@@ -103,8 +116,9 @@ class MainActivity : AppCompatActivity() {
         configureWebView(webView)
 
         // webview detail setting
-//        WebView.setWebContentsDebuggingEnabled(true)
+        WebView.setWebContentsDebuggingEnabled(true)
         val androidBridge = AndroidBridge(webView, this@MainActivity)
+        webView.webChromeClient = ParentWebChromeClient(parentLayout, this)
         webView.addJavascriptInterface(androidBridge, "android")
         // load url
         //webView.post {
@@ -114,8 +128,9 @@ class MainActivity : AppCompatActivity() {
     }
     private fun checkPermissions() {
         if(checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-            checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE), REQUEST_PERMISSIONS)
+            checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_PERMISSIONS)
         }
     }
     /**
@@ -194,7 +209,7 @@ class MainActivity : AppCompatActivity() {
 
         when(requestCode) {
             REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_ENABLED, REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_DISABLED -> {
-                val isCapture = requestCode == REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_ENABLED
+//                val isCapture = requestCode == REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_ENABLED
 //                if(grantResults[0] == PackageManager.PERMISSION_GRANTED) {
 //                    runCamera(isCapture)
 //                }
@@ -226,7 +241,6 @@ class MainActivity : AppCompatActivity() {
                 gpsTracker = GpsTracker(this@MainActivity)
                 val latitude = gpsTracker.getLatitude()
                 val longitude = gpsTracker.getLongitude()
-                saveLastLocationQuery(latitude, longitude)
                 obj.put("lat", latitude)
                 obj.put("lng", longitude)
                 webView.post {
@@ -320,6 +334,8 @@ class MainActivity : AppCompatActivity() {
         val hasFineLocationPermission = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
         val hasCoarseLocationPermission = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION)
 
+        Log.i("TEST1", hasFineLocationPermission.toString())
+        Log.i("TEST2", hasCoarseLocationPermission.toString())
         if (hasFineLocationPermission == PackageManager.PERMISSION_GRANTED && hasCoarseLocationPermission == PackageManager.PERMISSION_GRANTED) {
             // 2. 이미 퍼미션을 가지고 있다면
             // ( 안드로이드 6.0 이하 버전은 런타임 퍼미션이 필요없기 때문에 이미 허용된 걸로 인식합니다.)
@@ -329,7 +345,6 @@ class MainActivity : AppCompatActivity() {
             gpsTracker = GpsTracker(this@MainActivity)
             val latitude = gpsTracker.getLatitude()
             val longitude = gpsTracker.getLongitude()
-            saveLastLocationQuery(latitude, longitude)
             obj.put("lat", latitude)
             obj.put("lng", longitude)
             web.post {
@@ -393,15 +408,44 @@ class MainActivity : AppCompatActivity() {
             startActivityForResult(intentCamera, FILECHOOSER_LOLLIPOP_REQ_CODE)
         }
     }
+    private inner class ParentWebChromeClient(val parent: ViewGroup, val context: Context) : WebChromeClient() {
+        // For Android 5.0+ 카메라 - input type="file" 태그를 선택했을 때 반응
+        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+        override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri?>?>, fileChooserParams: FileChooserParams): Boolean {
+            Log.d("MainActivity", "5.0+")
 
-    fun saveLastLocationQuery(latitude: Double, longitude: Double) {
-        getSharedPreferences("location", Context.MODE_PRIVATE).edit()
-            .putString("location", "?lat=${latitude}&lng=${longitude}")
-            .apply()
-    }
+            // Callback 초기화 (중요!)
+            if (filePathCallbackLollipop != null) {
+                filePathCallbackLollipop!!.onReceiveValue(null)
+                filePathCallbackLollipop = null
+            }
+            //filePathCallbackLollipop = filePathCallback
+            return if(checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_DENIED) {
+                /*if(fileChooserParams.isCaptureEnabled)
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_ENABLED)
+                else
+                    requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_PERMISSION_WITH_CAPTURE_DISABLED)*/
+                AlertDialog.Builder(this@MainActivity).apply {
+                    setMessage("카메라 권한 설정 후 이용하실 수 있습니다")
+                    setNegativeButton("취소") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    setPositiveButton("설정으로 이동") { dialog, _ ->
+                        dialog.dismiss()
+                        //val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+                        startActivity(intent)
+                    }
+                }.create().show()
+                filePathCallback.onReceiveValue(null)
+                true
+            }
+            else {
+                filePathCallbackLollipop = filePathCallback
+                runCamera(fileChooserParams.isCaptureEnabled)
+                true
+            }
+        }
 
-    fun loadLastLocationQuery(): String {
-        val preference = getSharedPreferences("location", Context.MODE_PRIVATE)
-        return preference.getString("location", "")!!
     }
 }
