@@ -24,6 +24,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity() {
 
     lateinit var parentLayout: ViewGroup
     lateinit var webView: WebView
+    private var popUpWebView: WebView? = null
 
     private var startTime: Long = 0
 
@@ -138,7 +140,16 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onBackPressed() {
         // 부모 웹뷰의 백버튼 구현
-        webView.loadUrl("javascript:onBackPressed()")
+        if(popUpWebView != null) {
+            if(popUpWebView!!.canGoBack()) {
+                popUpWebView!!.goBack()
+            } else {
+                popUpWebView!!.loadUrl("javascript:window.close()")
+            }
+        } else {
+            webView.loadUrl("javascript:onBackPressed()")
+        }
+
         /*if((System.currentTimeMillis() - lastTimeBackPressed) < 1500){
             finish()
             return
@@ -447,5 +458,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        /**
+         * 결제를 위한 새 창 열기 처리
+         * */
+        override fun onCreateWindow(
+            view: WebView?,
+            isDialog: Boolean,
+            isUserGesture: Boolean,
+            resultMsg: Message?
+        ): Boolean {
+            val newWebView = WebView(this@MainActivity)
+            newWebView.settings.apply {
+                javaScriptEnabled = true
+            }
+            newWebView.webChromeClient = object: WebChromeClient() {
+                override fun onCloseWindow(window: WebView?) {
+                    super.onCloseWindow(window)
+                    webView.removeView(newWebView)
+                    popUpWebView = null
+                    newWebView.destroy()
+                }
+            }
+            newWebView.webViewClient = WebViewClient()
+            newWebView.layoutParams = webView.layoutParams
+            popUpWebView = newWebView
+            webView.addView(newWebView)
+
+            return if(resultMsg != null) {
+                val webViewTransport = resultMsg.obj as WebView.WebViewTransport
+                webViewTransport.webView = newWebView
+                resultMsg.sendToTarget()
+                true
+            } else {
+                false
+            }
+            //return super.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
+        }
     }
 }
