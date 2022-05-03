@@ -479,7 +479,42 @@ class MainActivity : AppCompatActivity() {
                     newWebView.destroy()
                 }
             }
-            newWebView.webViewClient = WebViewClient()
+            newWebView.webViewClient = object: WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url.toString()
+                    if(url.startsWith("http") || url.startsWith("https")) {
+                        return false
+                    } else {
+                        try {
+                            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                            if(packageManager.resolveActivity(intent, 0) == null) {
+                                val marketUri =
+                                    if(intent.`package` != null) {
+                                        Uri.parse("https://play.google.com/store/apps/details?id=${intent.`package`}")
+                                    } else {
+                                        if(intent.scheme == "kakaotalk") {
+                                            Uri.parse("https://play.google.com/store/apps/details?id=com.kakao.talk")
+                                        } else {
+                                            Uri.parse("https://play.google.com/store/apps/details?id=${intent.`package`}")
+                                        }
+                                    }
+                                val marketIntent = Intent(Intent.ACTION_VIEW, marketUri)
+                                startActivity(marketIntent)
+                            } else {
+                                startActivity(intent)
+                            }
+                            return true
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            return true
+                        }
+                    }
+                    //return super.shouldOverrideUrlLoading(view, request)
+                }
+            }
             newWebView.layoutParams = webView.layoutParams
             popUpWebView = newWebView
             webView.addView(newWebView)
