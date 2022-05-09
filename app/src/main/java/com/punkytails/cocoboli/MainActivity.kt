@@ -111,6 +111,12 @@ class MainActivity : AppCompatActivity() {
         parentLayout = findViewById(R.id.parent_layout)
         webView = findViewById(R.id.webView)
 
+        var intentData = intent.dataString
+        if(intentData != null) {
+            intentData = intentData.removePrefix("cocoboli://cocoboli.com/")
+            intentData = intentData.replace("/", "=")
+        }
+
         //timer
         startTime = System.currentTimeMillis()
 
@@ -122,11 +128,11 @@ class MainActivity : AppCompatActivity() {
         val androidBridge = AndroidBridge(webView, this@MainActivity)
         webView.webChromeClient = ParentWebChromeClient(parentLayout, this)
         webView.addJavascriptInterface(androidBridge, "android")
-        // load url
-        //webView.post {
-            //webView.loadUrl("http://cocoboli.com/main")
-        webView.loadUrl("http://cocoboli.com/main")
-        //}
+        if(intentData != null) {
+            webView.loadUrl("http://cocoboli.com/main?$intentData")
+        } else {
+            webView.loadUrl("http://cocoboli.com/main")
+        }
     }
     private fun checkPermissions() {
         if(checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
