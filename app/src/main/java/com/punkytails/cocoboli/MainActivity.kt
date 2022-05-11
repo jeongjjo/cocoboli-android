@@ -129,9 +129,9 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = ParentWebChromeClient(parentLayout, this)
         webView.addJavascriptInterface(androidBridge, "android")
         if(intentData != null) {
-            webView.loadUrl("http://cocoboli.com/main?$intentData")
+            webView.loadUrl("https://cocoboli.com/main?$intentData")
         } else {
-            webView.loadUrl("http://cocoboli.com/main")
+            webView.loadUrl("https://cocoboli.com/main")
         }
     }
     private fun checkPermissions() {
